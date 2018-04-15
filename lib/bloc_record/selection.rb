@@ -2,17 +2,31 @@ require 'sqlite3'
 
 module Selection
 	def find_one(id)
-		row = connection.get_first_row <<-SQL
-			SELECT #{columns.join ","} FROM #{table}
-			WHERE id = #{id};
-		SQL
+		if id.is_a?(Integer) && id > 0
+			row = connection.get_first_row <<-SQL
+				SELECT #{columns.join ","} FROM #{table}
+				WHERE id = #{id};
+			SQL
 
-		init_object_from_row(row)
+			init_object_from_row(row)
+		else
+			puts "Not a valid ID. Please try again"
+			return -1
+		end
 	end
 
 	def find(*ids)
-		if ids.length == 1
+		if ids.length == 1 && ids.first.is_a(Integer)
 			find_one(ids.first)
+		if ids.length > 1
+			ids.each do |id| 
+				if !id.is_a?(Integer)
+					puts "invalid combination of ids"
+					return -1
+				end
+			end
+		end
+
 		else
 			rows = connection.execute <<-SQL
 				SELECT #{columns.join ","} FROM #{table}
@@ -26,7 +40,7 @@ module Selection
 	def find_by(attribute, value)
 		row = connection.get_first_row <<-SQL
 			SELECT #{columns.join ","} FROM #{table}
-			WHERE #{attribute} = #{BlocRecord::Uitily.sql_strings(value)};
+			WHERE #{attribute} = #{BlocRecord::Utility.sql_strings(value)};
 		SQL
 		init_object_from_row(row)
 	end
@@ -76,6 +90,87 @@ module Selection
 			SELECT #{columns.join ","} FROM #{table};
 		SQL
 		rows_to_array(rows)
+	end
+
+	#support for batches
+	def find_each(options={})
+		start = options[:start]
+		batch_size = options[:batch_size]
+		# check options for start and batch_size values
+		if start != nil && batch_size != nil
+			rows = connection.execute <<-SQL
+				SELECT #{columns.join ","} FROM #{table}
+				LIMIT #{batch_size} OFFSET #{start};
+			SQL
+		elsif start != nil && batch_size == nil
+			rows = connection.execute <<-SQL 
+				SELECT #{columns.join ","} FROM #{table}
+				OFFSET #{start};
+			SQL
+		elsif start == nil && batch_size != nil 
+			rows = connection.execute <<-SQL 
+				SELECT #{columns.join ","} FROM #{table}
+				LIMIT #{batch_size};
+			SQL
+		else 
+			rows = connection.execute <<-SQL 
+				SELECT #{columns.join ","} FROM #{table};
+			SQL
+		end
+
+		rows.each do |row| 
+			yield init_object_from_row(row)
+		end
+	end
+
+	#similar to #find_each but yields an an array instead. maybe there's a better way to shorten this through altering #method_missing
+	def find_in_batches(options={})
+		start = options[:start]
+		batch_size = options[:batch_size]
+		# check options for start and batch_size values
+		if start != nil && batch_size != nil
+			rows = connection.execute <<-SQL
+				SELECT #{columns.join ","} FROM #{table}
+				LIMIT #{batch_size} OFFSET #{start};
+			SQL
+		elsif start != nil && batch_size == nil
+			rows = connection.execute <<-SQL
+				SELECT #{columns.join ","} FROM #{table}
+				OFFSET #{start};
+			SQL
+		elsif start == nil && batch_size != nil 
+			rows = connection.execute <<-SQL 
+				SELECT #{columns.join ","} FROM #{table}
+				LIMIT #{batch_size};
+			SQL
+		else 
+			rows = connection.execute <<-SQL 
+				SELECT #{columns.join ","} FROM #{table};
+			SQL
+		end
+
+		row_array = rows_to_array(rows)
+		yield(row_array)
+
+	end
+
+
+
+
+
+	#method missing overwrite
+	def method_missing(method_missing, *args)
+		if method_name.match(/find_by_/)
+			attribute = method_name.split('find_by_')[1]
+			if columns.include?(attribute)
+				find_by(attribute, *args)
+			else
+				puts "The #{attribute} does not exist in the current database"
+			end
+		else 
+			puts "Not a valid method"
+			return -1
+		end
 	end
 	
 
