@@ -16,8 +16,9 @@ module Selection
 	end
 
 	def find(*ids)
-		if ids.length == 1 && ids.first.is_a(Integer)
+		if ids.length == 1 && ids.first.is_a?(Integer)
 			find_one(ids.first)
+		end
 		if ids.length > 1
 			ids.each do |id| 
 				if !id.is_a?(Integer)
@@ -25,8 +26,6 @@ module Selection
 					return -1
 				end
 			end
-		end
-
 		else
 			rows = connection.execute <<-SQL
 				SELECT #{columns.join ","} FROM #{table}
@@ -91,6 +90,67 @@ module Selection
 		SQL
 		rows_to_array(rows)
 	end
+
+	def where(*args)
+		if args.count > 1
+			expression = args.shift
+			params = args
+		else 
+			case args.first 
+				when String 
+					expression = args.first 
+				when Hash 
+					expression_hash = BlocRecord::Utility.convert_keys(args.first)
+					expression = expression_hash.map {|key, value| "#{key}=#{BlocRecord::Utility.sql_strings(value)}"}.join(" and ")
+			end
+		end
+
+		sql = <<-SQL 
+			SELECT #{columns.join ","} FROM #{table}
+			WHERE #{expression};
+		SQL
+
+		rows = connection.execute(sql, params)
+		rows_to_array(rows)
+	end
+
+	def order(*order) 
+		if args.count. > 1 
+			order = args.join(",")
+		else
+			order = args.first.to_s
+		end
+
+		rows = connection.execute <<-SQL
+			SELECT * FROM #{table}
+			ORDER BY #{order};
+		SQL
+		rows_to_array(rows)
+	end
+
+	def join(*args)
+		if args.count > 1
+			joins = args.map { |arg| "INNER JOIN #{arg} ON #{arg}.#{table}_id = #{table}.id"}.join(" ")
+			rows = connection.execute <<-SQL 
+				SELECT * FROM #{table} #{joins};
+			SQL
+		else
+			case args.first
+				when String
+					rows = connection.execute <<-SQL
+						SELECT * FROM #{table} #{BlocRecord::Utility.sql_strings(args.first)};
+					SQL
+				when Symbol
+					rows = connection.execute <<-SQL 
+					SELECT * FROM #{table}
+					INNER JOIN #{args.first} ON #{arg.first}.#{table}_id = #{table}.id
+					SQL
+			 end 
+		end
+		rows_to_array(rows)
+	end
+
+
 
 	#support for batches
 	def find_each(options={})
