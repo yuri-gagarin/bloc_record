@@ -114,20 +114,33 @@ module Selection
 		rows_to_array(rows)
 	end
 
-	def order(*order) 
-		if args.count. > 1 
-			order = args.join(",")
-		else
-			order = args.first.to_s
+	#reorganize order method to accept string, symbol, or a key value pair
+	def order(*args) 
+		#normalize the arguments
+		#go through each argument to figure out what type it is
+		order_array = []
+		args.each do |arg|
+			case arg 
+			when String 
+				order_array.push(arg)
+			when Symbol 
+				order_array.push(arg.to_s)
+			when Hash 
+				order_array << arg.map{|key, value| "#{key} #{value}"}
+			end
 		end
+		order_command = order_array.join(",")
 
 		rows = connection.execute <<-SQL
 			SELECT * FROM #{table}
-			ORDER BY #{order};
+			ORDER BY #{order_command};
+
 		SQL
 		rows_to_array(rows)
+
 	end
 
+	#edit join method to support nested associations
 	def join(*args)
 		if args.count > 1
 			joins = args.map { |arg| "INNER JOIN #{arg} ON #{arg}.#{table}_id = #{table}.id"}.join(" ")
@@ -136,16 +149,26 @@ module Selection
 			SQL
 		else
 			case args.first
-				when String
-					rows = connection.execute <<-SQL
-						SELECT * FROM #{table} #{BlocRecord::Utility.sql_strings(args.first)};
-					SQL
-				when Symbol
-					rows = connection.execute <<-SQL 
+			when String
+				rows = connection.execute <<-SQL
+					SELECT * FROM #{table} #{BlocRecord::Utility.sql_strings(args.first)};
+				SQL
+			when Symbol
+				rows = connection.execute <<-SQL 
 					SELECT * FROM #{table}
-					INNER JOIN #{args.first} ON #{arg.first}.#{table}_id = #{table}.id
-					SQL
-			 end 
+					INNER JOIN #{args.first} ON #{arg.first}.#{table}_id = #{table}.id;
+				SQL
+			when Hash 
+				#extract the options from the hash
+				second_table = args[0].keys.first 
+				third_table = args[0].keys.first
+				rows = connection.execute <<-SQL 
+					SELECT * FROM #{table}
+					INNER JOIN #{second_table} ON #{second_table}.#{table}_id = #{table}.id
+					INNER JOIN #{third_table} ON #{third_table}.#{second_table}_id = #{second_table}.id;
+				SQL
+
+			end 
 		end
 		rows_to_array(rows)
 	end
