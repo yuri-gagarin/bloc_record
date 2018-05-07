@@ -59,40 +59,51 @@ module Persistence
 		end
 
 		def update(ids, updates) 
-			updates = BlocRecord::Utility.convert_keys(updates)
-			updates.delete "id"
+			#test for the values passed to updates
+			case updates
+			when Hash
+				updates = BlocRecord::Utility.convert_keys(updates)
+				updates.delete "id"
 
-			updates_array = updates.map {|key, value| "#{key} = #{BlocRecord::Utility.sql_strings(value)}"}
+				updates_array = updates.map {|key, value| "#{key} = #{BlocRecord::Utility.sql_strings(value)}"}
 
 
-			if ids.class == Integer  
-				where_clause = "WHERE id = #{ids};"
-			elsif ids.class == Array 
-				where_clause = ids.empty? ? "," : "WHERE id IN (#{ids.join(",")});"
-			else 
-				where_clause = ";"
+				if ids.class == Integer  
+					where_clause = "WHERE id = #{ids};"
+				elsif ids.class == Array 
+					where_clause = ids.empty? ? "," : "WHERE id IN (#{ids.join(",")});"
+				else 
+					where_clause = ";"
+				end
+				connection.execute <<-SQL
+
+					UPDATE #{table}
+					SET #{updates_array.join(",")}
+					#{where_clause}
+				SQL
+
+				true 
+			#if multiple records are passed
+			when Array
+				#cycle through array of updates and update each record
+				#respective to its id, which will also be an array of ids
+				updates.each_with_index do |data, index|
+					update(ids[index], data)
+				end
 			end
-
-			puts #{table}
-			puts <<-SQL 
-				UPDATE #{table}
-				SET #{updates_array.join(",")}
-				#{where_clause}
-			SQL
-
-
-			connection.execute <<-SQL
-
-				UPDATE #{table}
-				SET #{updates_array.join(",")}
-				#{where_clause}
-			SQL
-
-			true 
 		end
 
 		def update_all(updates)
 			update(nil, updates)
+		end
+
+		def method_missing(method, arg)
+			#test for a dynamic update method
+			if method.match(/update_/)
+				#extract the update command and update with the command and value
+				method_name = method.to_s.split("update_")[1]
+				update_attribute(method_name, arg)
+			end
 		end
 
 	end
