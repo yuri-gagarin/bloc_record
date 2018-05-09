@@ -29,5 +29,13 @@ module BlocRecord
 			end
 		end
 		
+		#destroy_all method
+		#will cycle through each object on self and delete
+		def destroy_all
+			self.each do |obj|
+				obj.destroy
+			end
+			true 
+		end
 	end
 end

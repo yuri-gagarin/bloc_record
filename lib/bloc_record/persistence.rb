@@ -74,24 +74,35 @@ module Persistence
 			SQL
 			true 
 		end
-
-		def destroy_all(conditions_hash=nil)
-			if conditions_hash && !conditions_hash.emtpy?
-				conditions_hash = BlocRecord::Utility.convert_keys(conditions_hash)
-				conditions = conditions_hash.map do |key, value|
-					"#{key} = #{BlocRecord::Utility.sql_strings(value)}"
+		#refactor #destroy_all to support String and Array conditions
+		def destroy_all(condition_params=nil)
+			if condition_params && !condition_params.empty?
+				#test for different argument types passed to the method
+				case condition_params
+				when Hash 
+					#convert the hash to strings, make the conditions array and join into single string argument
+					condition_params = BlocRecord::Utility.convert_keys(condition_params)
+					condition_params = condition_params.map do |key, value|
+						"#{key} = #{BlocRecord::Utility.sql_strings(value)}"
+					end
+					condition_params.join(" AND ")
+				when String 
+					#return a simple string argument
+					conditions = condition_params
+				when Array 
+					#return a joined string argument
+					conditions = condition_params.join(" OR ")
 				end
-				conditions.join(" AND ")
 				connection.execute <<-SQL
 					DELETE FROM #{table}
 					WHERE #{conditions};
 				SQL
-			else
-				connection.execute <<-SQL 
+			#else the params are empty, thus delete all records in the table
+			else 
+				connection.execute <<-SQL
 					DELETE FROM #{table};
 				SQL
 			end
-			true
 		end
 
 		def update(ids, updates) 
